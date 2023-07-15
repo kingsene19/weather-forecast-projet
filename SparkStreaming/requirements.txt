@@ -1,0 +1,7 @@
+findspark
+requests
+datetime
+pandas
+boto3
+configparser
+kafka-python

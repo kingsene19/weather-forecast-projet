@@ -1,0 +1,48 @@
+version: '3'
+
+services:
+
+  zookeeper:
+    image: bitnami/zookeeper:latest
+    container_name: zookeeper
+    ports:
+      - 2181:2181
+    environment:
+      - ZOOKEEPER_CLIENT_PORT=2181
+      - ZOOKEEPER_TICK_TIME=2000
+      - ZOO_ENABLE_AUTH=no
+      - ALLOW_ANONYMOUS_LOGIN=yes
+
+  kafka:
+    image: bitnami/kafka:latest
+    container_name: kafka
+    ports:
+      - 9092:9092
+    depends_on:
+      - zookeeper
+    environment:
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - ALLOW_PLAINTEXT_LISTENER=yes
+
+  api:
+    build:
+      context: ./API
+      dockerfile: Dockerfile
+    container_name: spark-api
+    ports:
+      - 4555:4555
+
+  spark:
+    build:
+      context: ./SparkStreaming
+      dockerfile: Dockerfile
+    container_name: spark
+    environment:
+      - SPARK_MODE=master
+    depends_on:
+      - kafka
+      - api
+
+
