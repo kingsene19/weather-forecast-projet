@@ -184,8 +184,8 @@ def process_batch(batch_df, batch_id):
             pandas_weather = pd.DataFrame(body,index=[0])
             spark_weather = spark.createDataFrame(pandas_weather)
             weather_df = weather_df.union(spark_weather)
-            # s3_client.put_object(Body=predictions_df.toPandas().to_csv(index=False),Bucket=aws_s3_bucket,Key="predictions.csv")
-            # s3_client.put_object(Body=weather_df.toPandas().to_csv(index=False),Bucket=aws_s3_bucket,Key="weather.csv")
+            s3_client.put_object(Body=predictions_df.toPandas().to_csv(index=False),Bucket=aws_s3_bucket,Key="predictions.csv")
+            s3_client.put_object(Body=weather_df.toPandas().to_csv(index=False),Bucket=aws_s3_bucket,Key="weather.csv")
             if checkDelay():
                 data = data = {
                     "timestamp": datetime.now(),
