@@ -32,7 +32,6 @@ spark = SparkSession\
     .getOrCreate()
 
 # Initialisation des variables pour récupérer les données de Weatherbit
-ip_address = socket.gethostbyname(socket.gethostname())
 city = "Thies"
 country = "SN"
 url = f"https://api.weatherbit.io/v2.0/current?city={city}&country={country}&key={api_key}"
@@ -46,7 +45,8 @@ s3_client = boto3.client(
 
 logSchema = StructType([
     StructField("timestamp", TimestampType(), True),
-    StructField("message", StringType(), True)
+    StructField("message", StringType(), True),
+    StructField("error", StringType(),True)
 ])
 logs = spark.createDataFrame([], logSchema)
 
@@ -69,7 +69,7 @@ def sendEmail(subject, message):
             server.starttls()
             server.login(sender_email, smtp_password)
             server.send_message(msg)
-    except smtplib.SMTPException as e:
+    except Exception as e:
         print('Error sending email:', str(e))
 
 #Methodes pour la journalisation
@@ -78,14 +78,16 @@ def checkDelay():
         return False
     sorted_logs = logs.orderBy(desc("timestamp"))
     last_timestamp = sorted_logs.limit(1).collect()[0]["timestamp"]
-    return (datetime.now()-last_timestamp).total_seconds()/60>16
+    return (datetime.now()-last_timestamp).total_seconds()/60>17
     
 def checkLogs():
     sorted_logs = logs.orderBy(desc("timestamp"))
     msg = sorted_logs.limit(1).collect()[0]["message"]
     if msg.startswith("E"):
+        body = sorted_logs.limit(1).collect()[0]["error"]
         print(f"{msg}, un email vous sera envoyé")
-        sendEmail("Réception des données", "Les données de prédiction n'ont pas été récupérées")
+        print(f"Cause: {body}")
+        sendEmail("Réception des données", "Les données de prédiction n'ont pas été récupérées\n"+body)
     elif msg.startswith("W"):
         print(f"{msg}, un email vous sera envoyé")
         sendEmail("Réception des données", "Il y a eu un délai lors de la récupération des données de prédiction")
@@ -115,11 +117,12 @@ weatherSchema = StructType([
     StructField('nua', FloatType(), True),
     StructField('prec', FloatType(), True),
     StructField('vis', FloatType(), True),
-    StructField('temp', FloatType(), True)
+    StructField('temp', FloatType(), True),
+    StructField('timestamp', TimestampType(), True)
 ])
 
-#predictions_df = spark.createDataFrame([],predictionSchema)
-#weather_df = spark.createDataFrame([],weatherSchema)
+# predictions_df = spark.createDataFrame([],predictionSchema)
+# weather_df = spark.createDataFrame([],weatherSchema)
 
 response = s3_client.get_object(Bucket=aws_s3_bucket, Key="predictions.csv")
 file_content = response['Body'].read().decode('utf-8')
@@ -130,19 +133,13 @@ file_content = response['Body'].read().decode('utf-8')
 pandas_df = pd.read_csv(io.StringIO(file_content))
 weather_df = spark.createDataFrame(pandas_df)
 
-weather_df.show()
-predictions_df.show()
-
 def process_batch(batch_df, batch_id):
     """
         Cette fonction permet de récupèrer les données arrivant de nos requêtes et les enregistre au niveau de S3
     """
     global predictions_df, weather_df,logs
-    now = datetime.now()
-    start_timestamp = int((now - timedelta(minutes=15)).timestamp())
-    end_timestamp = int(now.timestamp())
     try:
-        response = requests.get(f'{url}&start={start_timestamp}&end={end_timestamp}')
+        response = requests.get(f'{url}')
         data = response.json()
         body = {}
         for entry in data['data']:
@@ -154,11 +151,13 @@ def process_batch(batch_df, batch_id):
             body['nua'] = entry['clouds'],
             body['prec'] = entry['precip']
             body['vis'] = entry["vis"]
+            timestamp = datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%fZ')
         body['nua'] = body['nua'][0]
     except Exception as e:
-        data = data = {
+        data = {
             "timestamp": datetime.now(),
-            "message": "Erreur: Une erreur s'est produite lors de la récupération des données"
+            "message": "Erreur: Une erreur s'est produite lors de la récupération des données",
+            "error": str(e)
         }
         df = pd.DataFrame(data,index=[0])
         new_df = spark.createDataFrame(df)
@@ -168,43 +167,67 @@ def process_batch(batch_df, batch_id):
             reponse = requests.post(f'http://spark-api:4555/weather', json=body, headers={"Accept": "application/json"})
             data = reponse.json()['temps']
             body["temp"] = temp
+            body["timestamp"] = timestamp
         except Exception as e:
-            data = data = {
+            data = {
                 "timestamp": datetime.now(),
-                "message": "ERROR: Une erreur s'est produite lors de la récupération des données"
+                "message": "ERROR: Une erreur s'est produite lors de la récupération des données",
+                "error": str(e)
             }
             df = pd.DataFrame(data,index=[0])
             new_df = spark.createDataFrame(df)
             logs = logs.union(new_df)
         else:
-            print("Here")
-            pandas_df = pd.DataFrame(data,index=[0])
-            spark_df = spark.createDataFrame(pandas_df)
-            predictions_df = predictions_df.union(spark_df)
-            pandas_weather = pd.DataFrame(body,index=[0])
-            spark_weather = spark.createDataFrame(pandas_weather)
-            weather_df = weather_df.union(spark_weather)
-            s3_client.put_object(Body=predictions_df.toPandas().to_csv(index=False),Bucket=aws_s3_bucket,Key="predictions.csv")
-            s3_client.put_object(Body=weather_df.toPandas().to_csv(index=False),Bucket=aws_s3_bucket,Key="weather.csv")
-            if checkDelay():
-                data = data = {
+            try:
+                pandas_df = pd.DataFrame(data,index=[0])
+                spark_df = spark.createDataFrame(pandas_df)
+                predictions_df = predictions_df.union(spark_df)
+                pandas_weather = pd.DataFrame(body,index=[0])
+                spark_weather = spark.createDataFrame(pandas_weather)
+                weather_df = weather_df.union(spark_weather)
+                weather_df.cache()
+                mean_df = weather_df.withColumn('hour', hour('timestamp'))
+                mean_df = mean_df.groupBy('hour').agg(mean('temp').alias('temp_moy'))
+                daily_df = weather_df.withColumn('date', to_date('timestamp'))
+                daily_df = daily_df.groupBy('date').agg(mean('temp').alias('temp_moy'))
+                s3_client.put_object(Body=predictions_df.toPandas().to_csv(index=False),Bucket=aws_s3_bucket,Key="predictions.csv")
+                s3_client.put_object(Body=weather_df.toPandas().to_csv(index=False),Bucket=aws_s3_bucket,Key="weather.csv")
+                s3_client.put_object(Body=mean_df.toPandas().to_csv(index=False),Bucket=aws_s3_bucket,Key="hourly_weather.csv")
+                s3_client.put_object(Body=daily_df.toPandas().to_csv(index=False),Bucket=aws_s3_bucket,Key="daily_weather.csv")
+            except Exception as e:
+                data = {
                     "timestamp": datetime.now(),
-                    "message": "WARNING: Une délai est survenu lors de la récupération des données"
+                    "message": "Erreur: Une erreur s'est produite lors de la récupération des données",
+                    "error": str(e)
                 }
                 df = pd.DataFrame(data,index=[0])
                 new_df = spark.createDataFrame(df)
                 logs = logs.union(new_df)
             else:
-                data = data = {
-                    "timestamp": datetime.now(),
-                    "message": "INFOS: Les données ont été enregistrées"
-                }
-                df = pd.DataFrame(data,index=[0])
-                new_df = spark.createDataFrame(df)
-                logs = logs.union(new_df)
-            print("Data Written to S3")
+                if checkDelay():
+                    infos = {
+                        "timestamp": datetime.now(),
+                        "message": "WARNING: Une délai est survenu lors de la récupération des données",
+                        "error": ""
+                    }
+                    df = pd.DataFrame(infos,index=[0])
+                    new_df = spark.createDataFrame(df)
+                    logs = logs.union(new_df)
+                else:
+                    infos = {
+                        "timestamp": datetime.now(),
+                        "message": "INFOS: Les données ont été enregistrées",
+                        "error": ""
+                    }
+                    df = pd.DataFrame(infos,index=[0])
+                    new_df = spark.createDataFrame(df)
+                    logs = logs.union(new_df)
+                print("Data Written to S3")
     finally:
+        weather_df.unpersist()
+        logs.cache()
         checkLogs()
+        logs.unpersist()
         
 print("L'application a démarré")
 streaming_df = spark.readStream.format("rate").load()
