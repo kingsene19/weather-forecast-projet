@@ -187,7 +187,7 @@ def process_batch(batch_df, batch_id):
                 weather_df = weather_df.union(spark_weather)
                 weather_df.cache()
                 mean_df = weather_df.withColumn('hour', hour('timestamp'))
-                mean_df = mean_df.groupBy('hour').agg(mean('temp').alias('temp_moy'))
+                mean_df = mean_df.groupBy('hour').agg(mean('temp').alias('temp_moy')).orderBy('hour')
                 daily_df = weather_df.withColumn('date', to_date('timestamp'))
                 daily_df = daily_df.groupBy('date').agg(mean('temp').alias('temp_moy'))
                 s3_client.put_object(Body=predictions_df.toPandas().to_csv(index=False),Bucket=aws_s3_bucket,Key="predictions.csv")
