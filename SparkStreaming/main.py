@@ -122,17 +122,17 @@ weatherSchema = StructType([
     StructField('timestamp', TimestampType(), True)
 ])
 
-predictions_df = spark.createDataFrame([],predictionSchema)
-weather_df = spark.createDataFrame([],weatherSchema)
+# predictions_df = spark.createDataFrame([],predictionSchema)
+# weather_df = spark.createDataFrame([],weatherSchema)
 
-# response = s3_client.get_object(Bucket=aws_s3_bucket, Key="predictions.csv")
-# file_content = response['Body'].read().decode('utf-8')
-# pandas_df = pd.read_csv(io.StringIO(file_content))
-# predictions_df = spark.createDataFrame(pandas_df)
-# response = s3_client.get_object(Bucket=aws_s3_bucket, Key="weather.csv")
-# file_content = response['Body'].read().decode('utf-8')
-# pandas_df = pd.read_csv(io.StringIO(file_content))
-# weather_df = spark.createDataFrame(pandas_df)
+response = s3_client.get_object(Bucket=aws_s3_bucket, Key="predictions.csv")
+file_content = response['Body'].read().decode('utf-8')
+pandas_df = pd.read_csv(io.StringIO(file_content))
+predictions_df = spark.createDataFrame(pandas_df)
+response = s3_client.get_object(Bucket=aws_s3_bucket, Key="weather.csv")
+file_content = response['Body'].read().decode('utf-8')
+pandas_df = pd.read_csv(io.StringIO(file_content))
+weather_df = spark.createDataFrame(pandas_df)
 
 def process_batch(batch_df, batch_id):
     """
