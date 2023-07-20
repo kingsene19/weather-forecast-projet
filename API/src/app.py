@@ -19,7 +19,7 @@ app.add_middleware(
 async def predict(request: Request):
 
     body = await request.json()
-    x = [[body['app_temp'],body['hum'],body['wsp'],body['wdir'],body['nua'],body['prec'],body['vis']]]
+    x = [[body['app_temp'],body['hum'],body['wsp'],body['wdir'],body['nua'],body['prec'],body['vis'],body['ens']]]
     model = WeatherPredictor()
     result = model.predict_next_15(x)[0]
     infos = dict()

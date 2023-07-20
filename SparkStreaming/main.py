@@ -117,21 +117,22 @@ weatherSchema = StructType([
     StructField('nua', FloatType(), True),
     StructField('prec', FloatType(), True),
     StructField('vis', FloatType(), True),
+    StructField('ens',FloatType(),True),
     StructField('temp', FloatType(), True),
     StructField('timestamp', TimestampType(), True)
 ])
 
-# predictions_df = spark.createDataFrame([],predictionSchema)
-# weather_df = spark.createDataFrame([],weatherSchema)
+predictions_df = spark.createDataFrame([],predictionSchema)
+weather_df = spark.createDataFrame([],weatherSchema)
 
-response = s3_client.get_object(Bucket=aws_s3_bucket, Key="predictions.csv")
-file_content = response['Body'].read().decode('utf-8')
-pandas_df = pd.read_csv(io.StringIO(file_content))
-predictions_df = spark.createDataFrame(pandas_df)
-response = s3_client.get_object(Bucket=aws_s3_bucket, Key="weather.csv")
-file_content = response['Body'].read().decode('utf-8')
-pandas_df = pd.read_csv(io.StringIO(file_content))
-weather_df = spark.createDataFrame(pandas_df)
+# response = s3_client.get_object(Bucket=aws_s3_bucket, Key="predictions.csv")
+# file_content = response['Body'].read().decode('utf-8')
+# pandas_df = pd.read_csv(io.StringIO(file_content))
+# predictions_df = spark.createDataFrame(pandas_df)
+# response = s3_client.get_object(Bucket=aws_s3_bucket, Key="weather.csv")
+# file_content = response['Body'].read().decode('utf-8')
+# pandas_df = pd.read_csv(io.StringIO(file_content))
+# weather_df = spark.createDataFrame(pandas_df)
 
 def process_batch(batch_df, batch_id):
     """
@@ -143,16 +144,16 @@ def process_batch(batch_df, batch_id):
         data = response.json()
         body = {}
         for entry in data['data']:
-            temp =entry["temp"]
+            temp = entry["temp"]
             body['app_temp'] = entry['app_temp']
             body['hum'] = entry["rh"]
             body['wsp'] = entry["wind_spd"]
             body['wdir'] = entry["wind_dir"]
-            body['nua'] = entry['clouds'],
+            body['nua'] = entry['clouds']
             body['prec'] = entry['precip']
             body['vis'] = entry["vis"]
+            body['ens'] = entry['solar_rad']
             timestamp = datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%fZ')
-        body['nua'] = body['nua'][0]
     except Exception as e:
         data = {
             "timestamp": datetime.now(),
