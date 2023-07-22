@@ -11,17 +11,22 @@ La structure du repository est la suivante:
 
 ### Exécution
 Pour exécuter le projet, nous avons un fichier docker-compose à la racine du projet qui vous permet de conteneuriser et exécuter l'API et le streaming.
-Ensuite il vous suffit de démarrer le dashboard en utilisant la commande pour visualiser `python manage.py runserver` 
+Ensuite il vous suffit de démarrer le dashboard en utilisant la commande pour visualiser `python manage.py runserver`
+
 #### Containers
+
 ![img](https://i.ibb.co/n0prfh7/Screenshot-2023-07-22-at-14-00-25.png)
 
 #### Dashboard
 
 **Acceuil**
+
 ![img](https://i.ibb.co/W53G4Db/Screenshot-2023-07-22-at-14-01-59.png)
 
 **Predictions**
+
 ![img](https://i.ibb.co/3WmcrWc/Screenshot-2023-07-22-at-14-02-09.png)
 
 **Moyenne par heure et par jour**
+
 ![img](https://i.ibb.co/mc9KsW7/Screenshot-2023-07-22-at-14-02-23.png)
