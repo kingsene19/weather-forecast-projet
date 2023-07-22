@@ -48,7 +48,6 @@ logSchema = StructType([
     StructField("message", StringType(), True),
     StructField("error", StringType(),True)
 ])
-logs = spark.createDataFrame([], logSchema)
 
 # Initialisation des variables pour le serveur smtp
 smtp_server = 'mail.galgit.com'
@@ -78,7 +77,9 @@ def checkDelay():
         return False
     sorted_logs = logs.orderBy(desc("timestamp"))
     last_timestamp = sorted_logs.limit(1).collect()[0]["timestamp"]
-    return (datetime.now()-last_timestamp).total_seconds()/60>17
+    format_string = "%Y-%m-%d %H:%M:%S.%f"
+    last_timestamp = datetime.strptime(last_timestamp, format_string)
+    return (datetime.now()-last_timestamp).total_seconds()/60>16
     
 def checkLogs():
     sorted_logs = logs.orderBy(desc("timestamp"))
@@ -122,9 +123,6 @@ weatherSchema = StructType([
     StructField('timestamp', TimestampType(), True)
 ])
 
-# predictions_df = spark.createDataFrame([],predictionSchema)
-# weather_df = spark.createDataFrame([],weatherSchema)
-
 response = s3_client.get_object(Bucket=aws_s3_bucket, Key="predictions.csv")
 file_content = response['Body'].read().decode('utf-8')
 pandas_df = pd.read_csv(io.StringIO(file_content))
@@ -133,6 +131,11 @@ response = s3_client.get_object(Bucket=aws_s3_bucket, Key="weather.csv")
 file_content = response['Body'].read().decode('utf-8')
 pandas_df = pd.read_csv(io.StringIO(file_content))
 weather_df = spark.createDataFrame(pandas_df)
+response = s3_client.get_object(Bucket=aws_s3_bucket, Key="logs.csv")
+file_content = response['Body'].read().decode('utf-8')
+pandas_df = pd.read_csv(io.StringIO(file_content))
+logs = spark.createDataFrame(pandas_df)
+
 
 def process_batch(batch_df, batch_id):
     """
@@ -223,6 +226,7 @@ def process_batch(batch_df, batch_id):
                     df = pd.DataFrame(infos,index=[0])
                     new_df = spark.createDataFrame(df)
                     logs = logs.union(new_df)
+                s3_client.put_object(Body=logs.toPandas().to_csv(index=False),Bucket=aws_s3_bucket,Key="logs.csv")
                 print("Data Written to S3")
     finally:
         weather_df.unpersist()

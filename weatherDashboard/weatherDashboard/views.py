@@ -1,6 +1,5 @@
 import time
 from django.shortcuts import render, redirect
-
 import json
 import pandas as pd
 from django.http import JsonResponse
